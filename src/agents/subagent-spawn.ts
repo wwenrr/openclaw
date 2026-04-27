@@ -49,7 +49,7 @@ import {
   emitSessionLifecycleEvent,
   forkSessionFromParent,
   getGlobalHookRunner,
-  loadConfig,
+  getRuntimeConfig,
   mergeSessionEntry,
   mergeDeliveryContext,
   normalizeDeliveryContext,
@@ -91,7 +91,7 @@ type SubagentSpawnDeps = {
   callGateway: typeof callGateway;
   forkSessionFromParent: typeof forkSessionFromParent;
   getGlobalHookRunner: () => SubagentLifecycleHookRunner | null;
-  loadConfig: typeof loadConfig;
+  getRuntimeConfig: typeof getRuntimeConfig;
   resolveContextEngine: typeof resolveContextEngine;
   resolveParentForkMaxTokens: typeof resolveParentForkMaxTokens;
   updateSessionStore: typeof updateSessionStore;
@@ -101,7 +101,7 @@ const defaultSubagentSpawnDeps: SubagentSpawnDeps = {
   callGateway,
   forkSessionFromParent,
   getGlobalHookRunner,
-  loadConfig,
+  getRuntimeConfig,
   resolveContextEngine,
   resolveParentForkMaxTokens,
   updateSessionStore,
@@ -251,7 +251,7 @@ function buildDirectChildSessionPatch(patch: Record<string, unknown>): Partial<S
 }
 
 function loadSubagentConfig() {
-  return subagentSpawnDeps.loadConfig();
+  return subagentSpawnDeps.getRuntimeConfig();
 }
 
 async function persistInitialChildSessionRuntimeModel(params: {
@@ -725,7 +725,15 @@ export async function spawnSubagentDirect(
     };
   }
   const targetAgentId = requestedAgentId ? normalizeAgentId(requestedAgentId) : requesterAgentId;
-  const requesterOrigin = resolveRequesterOriginForChild({
+  const requesterOrigin = normalizeDeliveryContext({
+    channel: ctx.agentChannel,
+    accountId: ctx.agentAccountId,
+    to: ctx.agentTo,
+    ...(ctx.agentThreadId != null && ctx.agentThreadId !== ""
+      ? { threadId: ctx.agentThreadId }
+      : {}),
+  });
+  let childSessionOrigin = resolveRequesterOriginForChild({
     cfg,
     targetAgentId,
     requesterAgentId,
@@ -736,7 +744,6 @@ export async function spawnSubagentDirect(
     requesterGroupSpace: ctx.agentGroupSpace,
     requesterMemberRoleIds: ctx.agentMemberRoleIds,
   });
-  let childSessionOrigin = requesterOrigin;
   if (targetAgentId !== requesterAgentId) {
     const allowAgents =
       resolveAgentConfig(cfg, requesterAgentId)?.subagents?.allowAgents ??
@@ -892,10 +899,10 @@ export async function spawnSubagentDirect(
       mode: spawnMode,
       requesterSessionKey: requesterInternalKey,
       requester: {
-        channel: requesterOrigin?.channel,
-        accountId: requesterOrigin?.accountId,
-        to: requesterOrigin?.to,
-        threadId: requesterOrigin?.threadId,
+        channel: childSessionOrigin?.channel,
+        accountId: childSessionOrigin?.accountId,
+        to: childSessionOrigin?.to,
+        threadId: childSessionOrigin?.threadId,
       },
     });
     if (bindResult.status === "error") {
@@ -917,7 +924,7 @@ export async function spawnSubagentDirect(
     threadBindingReady = true;
     hasBoundThreadDeliveryOrigin = hasRoutableDeliveryOrigin(bindResult.deliveryOrigin);
     childSessionOrigin =
-      mergeDeliveryContext(bindResult.deliveryOrigin, requesterOrigin) ?? childSessionOrigin;
+      mergeDeliveryContext(bindResult.deliveryOrigin, childSessionOrigin) ?? childSessionOrigin;
   }
   const mountPathHint = sanitizeMountPathHint(params.attachMountPath);
 
@@ -1152,7 +1159,7 @@ export async function spawnSubagentDirect(
       childSessionKey,
       controllerSessionKey: requesterInternalKey,
       requesterSessionKey: requesterInternalKey,
-      requesterOrigin: childSessionOrigin,
+      requesterOrigin,
       requesterDisplayKey,
       task,
       cleanup,

@@ -155,10 +155,10 @@ appears, browser automation handles it when it can. Login, host admission, and
 browser/OS permission prompts are reported as manual action with a reason and
 message for the agent to relay.
 
-Chrome joins as the signed-in Chrome profile. In Meet, pick `BlackHole 2ch` for
-the microphone/speaker path used by OpenClaw. For clean duplex audio, use
-separate virtual devices or a Loopback-style graph; a single BlackHole device is
-enough for a first smoke test but can echo.
+Local Chrome joins through the signed-in OpenClaw browser profile. In Meet, pick
+`BlackHole 2ch` for the microphone/speaker path used by OpenClaw. For clean
+duplex audio, use separate virtual devices or a Loopback-style graph; a single
+BlackHole device is enough for a first smoke test but can echo.
 
 ### Local gateway + Parallels Chrome
 
@@ -336,7 +336,7 @@ Common failure checks:
 The Chrome realtime default uses two external tools:
 
 - `sox`: command-line audio utility. The plugin uses its `rec` and `play`
-  commands for the default 8 kHz G.711 mu-law audio bridge.
+  commands for the default 24 kHz PCM16 audio bridge.
 - `blackhole-2ch`: macOS virtual audio driver. It creates the `BlackHole 2ch`
   audio device that Chrome/Meet can route through.
 
@@ -350,12 +350,14 @@ upstream licensing terms or get a separate license from Existential Audio.
 
 ### Chrome
 
-Chrome transport opens the Meet URL in Google Chrome and joins as the signed-in
-Chrome profile. On macOS, the plugin checks for `BlackHole 2ch` before launch.
-If configured, it also runs an audio bridge health command and startup command
-before opening Chrome. Use `chrome` when Chrome/audio live on the Gateway host;
-use `chrome-node` when Chrome/audio live on a paired node such as a Parallels
-macOS VM.
+Chrome transport opens the Meet URL through OpenClaw browser control and joins
+as the signed-in OpenClaw browser profile. On macOS, the plugin checks for
+`BlackHole 2ch` before launch. If configured, it also runs an audio bridge
+health command and startup command before opening Chrome. Use `chrome` when
+Chrome/audio live on the Gateway host; use `chrome-node` when Chrome/audio live
+on a paired node such as a Parallels macOS VM. For local Chrome, choose the
+profile with `browser.defaultProfile`; `chrome.browserProfile` is passed to
+`chrome-node` hosts.
 
 ```bash
 openclaw googlemeet join https://meet.google.com/abc-defg-hij --transport chrome
@@ -887,10 +889,13 @@ Defaults:
   opening duplicates
 - `chrome.waitForInCallMs: 20000`: wait for the Meet tab to report in-call
   before the realtime intro is triggered
-- `chrome.audioInputCommand`: SoX `rec` command writing 8 kHz G.711 mu-law
-  audio to stdout
-- `chrome.audioOutputCommand`: SoX `play` command reading 8 kHz G.711 mu-law
-  audio from stdin
+- `chrome.audioFormat: "pcm16-24khz"`: command-pair audio format. Use
+  `"g711-ulaw-8khz"` only for legacy/custom command pairs that still emit
+  telephony audio.
+- `chrome.audioInputCommand`: SoX `rec` command writing audio in
+  `chrome.audioFormat`
+- `chrome.audioOutputCommand`: SoX `play` command reading audio in
+  `chrome.audioFormat`
 - `realtime.provider: "openai"`
 - `realtime.toolPolicy: "safe-read-only"`
 - `realtime.instructions`: brief spoken replies, with
@@ -907,8 +912,10 @@ Optional overrides:
   defaults: {
     meeting: "https://meet.google.com/abc-defg-hij",
   },
+  browser: {
+    defaultProfile: "openclaw",
+  },
   chrome: {
-    browserProfile: "Default",
     guestName: "OpenClaw Agent",
     waitForInCallMs: 30000,
   },
@@ -1313,8 +1320,9 @@ phone dial-in participation.
 Chrome realtime mode needs either:
 
 - `chrome.audioInputCommand` plus `chrome.audioOutputCommand`: OpenClaw owns the
-  realtime model bridge and pipes 8 kHz G.711 mu-law audio between those
-  commands and the selected realtime voice provider.
+  realtime model bridge and pipes audio in `chrome.audioFormat` between those
+  commands and the selected realtime voice provider. The default Chrome path is
+  24 kHz PCM16; 8 kHz G.711 mu-law remains available for legacy command pairs.
 - `chrome.audioBridgeCommand`: an external bridge command owns the whole local
   audio path and must exit after starting or validating its daemon.
 
